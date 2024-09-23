@@ -26,7 +26,6 @@ jobs:
    # upgrade npm to required version
       - name: set up node js
         run: npm install -g npm@7
-
       - name: install dependecies
         run: |
           cd codebase/rdicidr-0.1.0
