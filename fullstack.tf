@@ -13,6 +13,7 @@ terraform {
 }
 
 
+
 variable "environment_name" {
   description = "Environment to deploy: devel, stage, prod"
   type        = string
@@ -50,11 +51,11 @@ resource "aws_s3_bucket_public_access_block" "public_access_block" {
 
 
 resource "aws_s3_bucket_object" "build_files" {
-  for_each = fileset("/home/runner/work/testing_fullstack/testing_fullstack/build", "**")
+  for_each = fileset("/home/runner/work/fullstack/fullstack/build", "**")
 
   bucket = aws_s3_bucket.app_bucket.bucket
   key    = each.value
-  source = "/home/runner/work/testing_fullstack/testing_fullstack/build/${each.value}"
+  source = "/home/runner/work/fullstack/fullstack/build/${each.value}"
   acl    = "public-read"
  # Set content-type based on file extension
   content_type = lookup(
