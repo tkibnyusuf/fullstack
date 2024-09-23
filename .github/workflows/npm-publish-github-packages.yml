@@ -1,74 +1,176 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+name: CI/CD Workflow
 
-name: CICD workflow
-
+# This workflow runs on different branches based on the provided strategy
 on:
- push: 
-  branches:
-   - main
-   - devel
-   - stage
-   - prod
+  push:
+    branches:
+      - devel
+      - stage
+      - prod
+
+
 jobs:
+  # Job for building and testing on pull requests and development branch
   build:
-    # if: github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/stage' || github.ref == 'refs/heads/prod'
+    if: github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/stage' || github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    # Set up the correct version of Node.js and npm
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '15.x'  # Set the correct Node.js version (>= 15.0.0 < 16.0.0)
+        check-latest: true
+
+    # Upgrade npm to the required version
+    - name: Upgrade npm to 7.x
+      run: npm install -g npm@7
+
+    # Cache Node.js modules with the correct path to package-lock.json
+    - name: Cache Node.js modules
+      uses: actions/cache@v2
+      with:
+        path: codebase/rdicidr-0.1.0/node_modules
+        key: ${{ runner.os }}-node-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    # Install dependencies from the codebase/rdicidr-0.1.0 directory
+    - name: Install dependencies
+      run: |
+        cd codebase/rdicidr-0.1.0
+        npm install
+
+    # Run linter (ESLint)
+    - name: Run linter (ESLint)
+      run: |
+        cd codebase/rdicidr-0.1.0
+        npm run lint
+
+    # Run Prettier (Ensure Prettier is installed)
+    - name: Run formatter (Prettier)
+      run: |
+        cd codebase/rdicidr-0.1.0
+        npm run prettier
+
+    # Run tests (Jest)
+    - name: Run tests (Jest)
+      env:
+        CI: true
+      run: |
+        cd codebase/rdicidr-0.1.0
+        npm run test
+
+    # Build the project
+    - name: Build the project
+      run: |
+        cd codebase/rdicidr-0.1.0
+        npm run build
+   # Debugging step to list files in the current directory
+    - name: List files in the current directory
+      run: ls -la
+
+    # Debugging step to list files in the build directory
+    - name: List files in the build directory
+      run: ls -la ./codebase/rdicidr-0.1.0/build        
+    # Upload the build directory (e.g., dist or build) as an artifact
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifact
+        path: ./codebase/rdicidr-0.1.0/build   # Adjust this path to the correct build output folder (e.g., dist or build) 
+
+ # Job to deploy to development environment (devel branch)
+  deploy-to-devel:
+    if: github.ref == 'refs/heads/devel'
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: check out code
-        uses: actions/checkout@v2
-        
-    #setup nodejs 
-      - name: set up node js
-        uses: actions/setup-node@v2
-        with:
-         node-version: '15.x'
-         check-latest: true
-   # upgrade npm to required version
-      - name: set up node js
-        run: npm install -g npm@7
-      - name: install dependecies
-        run: |
-          cd codebase/rdicidr-0.1.0
-          npm install
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Linter (ESLint) npm run lint
-        run: |
-         cd codebase/rdicidr-0.1.0
-         npm run lint
+    # Download the uploaded artifact
+    - name: Download build artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifact
+        path: ./build  # Download to a local `build` folder
 
-      - name: run test
-        env:
-         CI: true
-        run: |
-         cd codebase/rdicidr-0.1.0
-         npm run test
-      - name: build the project
-        run: |
-         cd codebase/rdicidr-0.1.0
-         npm run build
-      - name: upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-         name: build-artifact
-         path: ./codebase/rdicidr-0.1.0/build
-        
-         
-      
+    # Set up Terraform
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
 
-  # publish-gpr:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #     packages: write
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: 20
-  #         registry-url: https://npm.pkg.github.com/
-  #     - run: npm ci
-  #     - run: npm publish
-  #       env:
-  #         NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+     # Initialize and apply Terraform with AWS credentials passed via environment variables
+    - name: Terraform Init and Apply
+      run: |
+        terraform init
+        terraform apply -auto-approve -var "environment_name=devel"
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+ # Job to handle deployment from `devel to stage'
+  deploy-to-stage:
+    if: github.ref == 'refs/heads/stage'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    # Download the uploaded artifact
+    - name: Download build artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifact
+        path: ./build  # Download to a local `build` folder
+
+    # Set up Terraform
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
+    # Initialize and apply Terraform with AWS credentials passed via environment variables
+    - name: Terraform Init and Apply
+      run: |
+        terraform init
+        terraform apply -auto-approve -var "environment_name=stage"
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}     
+
+    # Apply Terraform to upload the build folder to the existing S3 bucket
+    - name: Deploy to S3
+      run: terraform apply -auto-approve
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}  
+ # Job to handle deployment from `stage to prod'
+  deploy-to-prod:
+    if: github.ref == 'refs/heads/prod'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    # Download the uploaded artifact
+    - name: Download build artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifact
+        path: ./build  # Download to a local `build` folder
+
+    # Set up Terraform
+    - name: Set up Terraform
+      uses: hashicorp/setup-terraform@v1
+    # Initialize and apply Terraform with AWS credentials passed via environment variables
+    - name: Terraform Init and Apply
+      run: |
+        terraform init
+        terraform apply -auto-approve -var "environment_name=prod"
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
