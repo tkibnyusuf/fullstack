@@ -1,0 +1,68 @@
+# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
+# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+
+name: CICD workflow
+
+on:
+ push: 
+  branches: 
+   - devel
+   - stage
+   - prod
+jobs:
+  build:
+    if: github.ref == 'refs/heads/devel' || github.ref == 'refs/heads/stage' || github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    steps:
+      - name: check out code
+      - uses: actions/checkout@v2
+    #setup nodejs 
+      - name: set up node js
+        uses: actions/setup-node@v2
+        with:
+         node-version: '15.x'
+         check-latest: true
+   # upgrade npm to required version
+      - name: set up node js
+        run: npm install -g npm@7
+
+      - name: install dependecies
+        run: |
+          cd codebase/rdicidr-0.1.0
+          npm install
+
+      - name: Linter (ESLint) npm run lint
+        run: |
+         cd codebase/rdicidr-0.1.0
+         npm run lint
+
+      - name: run test
+        env:
+         CI: true
+        run: |
+         cd codebase/rdicidr-0.1.0
+          npm run test
+      - name: build the project
+        run: |
+         cd codebase/rdicidr-0.1.0
+         npm run build
+        
+         
+      
+
+  # publish-gpr:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20
+  #         registry-url: https://npm.pkg.github.com/
+  #     - run: npm ci
+  #     - run: npm publish
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
