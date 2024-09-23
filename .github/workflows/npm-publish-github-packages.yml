@@ -47,6 +47,11 @@ jobs:
         run: |
          cd codebase/rdicidr-0.1.0
          npm run build
+      - name: upload artifact
+        uses: action/upload-artifact@v3
+        with:
+         name: build-artifact
+         path: ./codebase/rdicidr-0.1.0/build
         
          
       
