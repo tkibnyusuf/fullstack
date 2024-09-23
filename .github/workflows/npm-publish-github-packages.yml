@@ -5,7 +5,8 @@ name: CICD workflow
 
 on:
  push: 
-  branches: 
+  branches:
+   - main
    - devel
    - stage
    - prod
